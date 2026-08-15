@@ -1,0 +1,120 @@
+# Non-secret, version-controlled configuration.
+#
+# Secrets live in .env and never appear here. Nothing in this file is duplicated
+# in Python source: every value below is read through assistant.config.Settings,
+# so changing behaviour means editing this file, not the code.
+
+llm:
+  # OpenAI-compatible endpoint. Any provider exposing that API shape works.
+  base_url: https://openrouter.ai/api/v1
+
+  # WARNING: this model must support structured outputs (response_format with a
+  # json_schema). The assistant asks for its answer as strict JSON, and a model
+  # that ignores the parameter replies in prose, which fails to parse on every
+  # single question.
+  #
+  # Free OpenRouter variants expose only a subset of parameters, and most of them
+  # drop exactly this one: nvidia/nemotron-3-ultra-550b-a55b supports it, its
+  # :free variant does not. Before changing this line, check the model's
+  # supported_parameters at https://openrouter.ai/api/v1/models and confirm it
+  # lists both response_format and structured_outputs.
+  model: nvidia/nemotron-3-super-120b-a12b:free
+
+  # Low temperature: the model must reformulate the retrieved documentation,
+  # not embellish it. This is a hallucination control, not a style preference.
+  temperature: 0.1
+
+  # Enough for a dozen numbered steps plus citations; a truncated answer would
+  # surface as a half-written procedure, which is worse than an escalation.
+  max_tokens: 2000
+
+  timeout_seconds: 120
+
+embedding:
+  # Multilingual model with solid Italian coverage, 384 dimensions, ~470 MB.
+  #
+  # WARNING: retrieval.similarity_threshold below is calibrated FOR THIS MODEL.
+  # Different embedding models spread cosine similarity over different ranges,
+  # so changing this line without recalibrating the threshold breaks escalation
+  # silently — the assistant keeps answering, just from the wrong sections.
+  model: intfloat/multilingual-e5-small
+
+  # The e5 family expects asymmetric prefixes: questions and passages are
+  # encoded differently. Models that do not need them take empty strings.
+  query_prefix: "query: "
+  passage_prefix: "passage: "
+
+retrieval:
+  # Upper bound on the chunks handed to the model, not a fixed amount: only the
+  # ones at or above similarity_threshold are actually passed as context.
+  #
+  # Most questions are answered by a single section — the documentation is
+  # written that way — but some legitimately span two or three (changing a
+  # user's role *and* their branches; a return that is both late and damaged).
+  # Above ~5, each extra chunk is plausible-looking but irrelevant material the
+  # model is free to cite, which widens the hallucination surface rather than
+  # improving accuracy.
+  top_k: 5
+
+  # Escalation gate (gate 1). Below this score the assistant hands over to a
+  # human without calling the model at all.
+  #
+  # MEASURED, not estimated. 18 questions scored against the real index built
+  # from docs_source/ (90 chunks) with intfloat/multilingual-e5-small — 10
+  # answerable from the documentation, 8 deliberately outside it:
+  #
+  #   lowest  in-scope  best score:  0.8526  ("Come metto un'unità fuori servizio?")
+  #   highest out-scope best score:  0.8707  ("Come integro Rentaly con SAP via API REST?")
+  #
+  # THE TWO GROUPS OVERLAP. No threshold separates them, and this one is not a
+  # compromise between them — it sits below both. The worst case is structural
+  # rather than a matter of tuning: a question that is lexically on-topic about
+  # an undocumented feature scores like a real one, because that is exactly what
+  # an embedding measures.
+  #
+  # The consequence is worth stating plainly: GATE 1 IS A COST FILTER, NOT A
+  # CORRECTNESS GUARANTEE. At 0.80 it blocks 3 of the 8 out-of-scope questions
+  # before any token is spent, and lets the rest through to the model. What
+  # keeps those from being answered out of thin air is gate 2 — the citation
+  # validator in generation/citation_validator.py — plus the model's own
+  # not_in_documentation outcome. Raising this value buys a few more cheap
+  # rejections and starts refusing genuine questions; it does not turn gate 1
+  # into a guarantee.
+  #
+  # An earlier version of this comment claimed unrelated Italian text lands at
+  # 0.70-0.78. It does not: measured, it lands at 0.79-0.87. The figure was an
+  # estimate and it was wrong.
+  #
+  # To recalibrate after replacing the documentation, repeat the measurement:
+  # score ~20 answerable and ~10 out-of-scope questions against the rebuilt
+  # index, and look at whether the groups separate at all before choosing a
+  # value.
+  similarity_threshold: 0.80
+
+chunking:
+  # Sections in docs_source/ are written self-contained and are the natural
+  # chunk boundary. These limits only matter for the few sections that exceed
+  # them — long error tables, mostly — which get split rather than truncated.
+  max_chars: 2000
+  overlap_chars: 200
+
+store:
+  # ChromaDB collection name. Kept here so the adapter hardcodes nothing.
+  collection_name: rentaly-docs
+
+documentation:
+  # Public address of a section, used only for the "url" field of the citations
+  # returned by the HTTP API. Must contain {doc_id} and {anchor}.
+  #
+  # Leave empty when the documentation is not published anywhere: citations then
+  # carry "url": null and the client builds its own link from doc_id and anchor.
+  # The API never falls back to a file:// URL — it would be dead on the client's
+  # machine and would expose the server's filesystem layout.
+  #
+  # Example: "https://docs.esempio.it/{doc_id}#{anchor}"
+  url_template: null
+
+paths:
+  # Relative paths are resolved against the project root.
+  docs_source: docs_source
+  vector_store: .chroma
