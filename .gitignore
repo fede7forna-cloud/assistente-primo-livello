@@ -37,7 +37,9 @@ MANIFEST
 pip-wheel-metadata/
 
 # Virtual environments
-.venv/
+# .venv*/ and not .venv/: a second environment created alongside the first
+# (.venv-1, .venv312) is common enough, and would otherwise be committed whole.
+.venv*/
 venv/
 env/
 ENV/
