@@ -127,6 +127,31 @@ Conseguenze non negoziabili:
 
 **Regola: nessuna chiave, URL o nome modello scritto in un file `.py`.** Tutto passa da `Settings`.
 
+### Credenziali: chiedere sempre prima di usarle
+
+> **Regola: non usare mai una credenziale memorizzata sulla macchina senza averlo chiesto
+> prima, nemmeno quando serve a ottenere esattamente il risultato richiesto.**
+
+Vale per il token GitHub in Git Credential Manager, per `OPENROUTER_API_KEY` in `.env`, per
+le chiavi in variabili d'ambiente e per qualsiasi altro segreto raggiungibile dal progetto.
+
+Il motivo non è il singolo comando, ma l'ampiezza di ciò che quella credenziale autorizza:
+un token GitHub che imposta la descrizione di un repository può anche cancellarlo, renderlo
+privato, riscriverne la cronologia, leggere i repository privati e agire su ogni
+organizzazione a cui l'utente appartiene. Chi autorizza il risultato non sta autorizzando
+lo strumento.
+
+Il permesso di usare una credenziale per un'operazione non si estende alla successiva:
+va richiesto ogni volta, dicendo **quale** credenziale, **per quale chiamata** e **con quale
+effetto**.
+
+Se una credenziale non è disponibile o il permesso non arriva, l'alternativa corretta è
+descrivere all'utente i passaggi manuali, non aggirare l'ostacolo.
+
+*Origine della regola: durante la pubblicazione del repository, descrizione e topic sono
+stati impostati recuperando il token GitHub da Git Credential Manager senza chiederlo
+prima. Il risultato era quello richiesto, il modo no.*
+
 ---
 
 ## 4. Struttura delle cartelle
